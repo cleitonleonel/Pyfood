@@ -1,0 +1,16 @@
+client_id: iconnect_v3_homologation
+client_secret: PR2#!HxY
+username: STORE USER FOR ACCESS TO THE ORDER MANAGER
+password: STORE PASSWORD FOR ACCESS TO THE ORDER MANAGER
+grant_type: password
+
+
+Note:
+   When running the program for the first time without passing the configuration arguments required for
+   its operation, it will ask via inputs at the terminal to enter this data to access the api and the store
+   at ifood, after completing the configuration of these authentication fields, the program will
+   save a configuration file to be able to authenticate the next times it is executed, no longer having to enter
+   this data.
+
+Ex:
+  {"id": "iconnect_v3_homologation", "secret": "PR2#!HxY", "username": "POS-123456789", "password": "POS-123456789", "merchant": "12345678"}
