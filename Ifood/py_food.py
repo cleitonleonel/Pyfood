@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import time
+import shutil
 import requests
 from datetime import datetime
 from threading import Thread
@@ -14,14 +15,30 @@ BASE_URL = 'https://pos-api.ifood.com.br'
 
 
 def resource_path(relative_path):
-    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    try:
+        this_file = __file__
+    except NameError:
+        this_file = sys.argv[0]
+    this_file = os.path.abspath(this_file)
+
+    if getattr(sys, 'frozen', False):
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    else:
+        base_path = os.path.dirname(this_file)
+
     return os.path.join(base_path, relative_path)
 
 
 class Manager:
 
+    def __init__(self):
+        self.debug = False
+        self.level = 0
+        self.branch = '01'
+
     def write_json_file(self, data, file_name, out_folder_path=None):
-        folder = f'{branch}/tmp'
+        folder = resource_path('tmp')
+
         if type(data) is list:
             new_dict = {file_name: data}
             data = new_dict
@@ -34,12 +51,13 @@ class Manager:
             _data = json.dumps(data)
             with open(dirt, 'w') as file:
                 file_json = file.write(str(_data))
+            shutil.copy(dirt, f'{self.branch}/tmp')
             return file_json
         except ValueError:
             print('Error!!!')
 
     def debug_log(self, msg, end='\n'):
-        if DEBUG:
+        if self.debug:
             print(msg, end=end)
 
     def listen_events(self):
@@ -54,7 +72,6 @@ class Manager:
             if len(new_orders) > 0:
                 file_name = new_orders[0]['shortReference']
 
-                # NOT USED
                 # orders = self.extract_data(new_orders)
                 # self.write_json_file(orders[0], f'del_{file_name}')
 
@@ -68,7 +85,7 @@ class Manager:
         item_list = []
         for index, order in enumerate(orders):
             order_data = {
-                'loja': f'{branch}',
+                'loja': f'{self.branch}',
                 'palcnum': 'IFOOD',
                 'pclddtped': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
                 'pclnnum': orders[index]['shortReference'],
@@ -134,7 +151,7 @@ class Manager:
         return order_list
 
     def save_credentials(self):
-        with open(f'{branch}/ifood_client.json', 'w') as file:
+        with open(f'{self.branch}/ifood_client.json', 'w') as file:
             credentials = {
                 'id': input('Entry your client_id: '),
                 'secret': input('Entry your client_secret: '),
@@ -149,16 +166,18 @@ class Manager:
 
 class IFood:
 
-    def __init__(self, client_id=None, client_secret=None, username=None, password=None, merchant_id=None):
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.username = username
-        self.password = password
-        self.merchant_id = merchant_id
+    def __init__(self):
+        self.client_id = None
+        self.client_secret = None
+        self.username = None
+        self.password = None
         self.current_token = None
         self.token_expires = None
         self.merchant_uuid = None
         self.categories_id = None
+        self.merchant_id = None
+        self.confirmed_list = []
+        self.manager = Manager()
         self.session = requests.Session()
 
     def headers(self):
@@ -172,7 +191,7 @@ class IFood:
     def send_request(self, method, url, **kwargs):
         try:
             response = self.session.request(method, url, **kwargs)
-        except ValueError:
+        except:
             return None
         if response.status_code == 200:
             try:
@@ -182,7 +201,12 @@ class IFood:
         else:
             return response
 
-    def auth(self):
+    def auth(self, client_id, client_secret, username, password):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.username = username
+        self.password = password
+
         payload = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
@@ -200,14 +224,17 @@ class IFood:
             self.token_expires = response['expires_in']
             return self.current_token
         else:
-            return manager.debug_log('Fail in authentication!!!')
+            return self.manager.debug_log('Fail in authentication!!!')
+
+    def reconnect(self):
+        return self.auth(self.client_id, self.client_secret, self.username, self.password)
 
     def get_current_token(self):
         return self.current_token
 
     def save_token(self):
-        self.auth()
-        with open(f'{branch}/token', 'w') as file:
+        self.reconnect()
+        with open(f'{self.manager.branch}/token', 'w') as file:
             file.write(self.current_token)
         return self.current_token
 
@@ -224,20 +251,25 @@ class IFood:
         return self.save_token()
 
     def get_token(self):
-        if os.path.exists(f'{branch}/token'):
-            with open(f'{branch}/token') as file:
+        if os.path.exists(f'{self.manager.branch}/token'):
+            with open(f'{self.manager.branch}/token') as file:
                 key = file.read()
             if self.check_token(key):
                 self.current_token = key
-                manager.debug_log('The token is valid.')
+                self.manager.debug_log('The token is valid.')
                 return self.current_token
             else:
-                manager.debug_log('Generating new token...')
+                self.manager.debug_log('Generating new token...')
                 return self.get_new_token()
         else:
-            self.auth()
-            with open(f'{branch}/token', 'w') as file:
+            self.reconnect()
+            if not self.current_token:
+                sys.exit(0)
+            with open(f'{self.manager.branch}/token', 'w') as file:
                 file.write(self.current_token)
+
+            self.manager.debug_log('Generating and save token...')
+
         return self.current_token
 
     def polling_events(self):
@@ -301,16 +333,19 @@ class IFood:
         return self.send_request('POST', f'{BASE_URL}/v1.0/orders/{reference}/statuses/confirmation', headers=headers)
 
     def save_cache_orders(self, reference):
-        with open(f'{branch}/orders', 'a') as file:
+        with open(f'{self.manager.branch}/orders', 'a') as file:
             file.write(reference + ',')
 
     def load_cache_orders(self, reference):
         orders_list = []
-        if os.path.exists(f'{branch}/orders'):
-            with open(f'{branch}/orders', 'r') as file:
+        if os.path.exists(f'{self.manager.branch}/orders'):
+            with open(f'{self.manager.branch}/orders', 'r') as file:
                 orders_list = file.read().split(',')
+            if len(orders_list) > 100:
+                with open(f'{self.manager.branch}/orders', 'w') as file:
+                    file.write('')
         else:
-            with open(f'{branch}/orders', 'w') as file:
+            with open(f'{self.manager.branch}/orders', 'w') as file:
                 file.write('')
         if reference not in orders_list:
             return True
@@ -325,34 +360,40 @@ class IFood:
         new_orders_list = []
         if events and len(events) > 0:
             for event in events:
-                if DEBUG:
-                    if event['code'] == 'PLACED':
-                        reference_id = event['correlationId']
+                reference_id = event['correlationId']
+                if self.manager.debug and int(self.manager.level) > 0:
+                    if event['code'] == 'PLACED' and reference_id not in self.confirmed_list:
                         if self.load_cache_orders(reference_id):
-
-                            os.system(f'mpg123 {branch}/arrived-order.mp3 > /dev/null 2>&1')
+                            os.system(f'mpg123 {resource_path("tmp")}/arrived-order.mp3 > /dev/null 2>&1')
 
                             order_detail = client.get_order_details(reference=reference_id)
-                            manager.debug_log(f'\nNEW ORDER ==>> #{order_detail["shortReference"]},\n'
-                                              f' value with delivery ==>> {order_detail["totalPrice"]},\n'
-                                              f' reference id ==>> {reference_id}')
+                            self.manager.debug_log(f'\nNEW ORDER ==>> #{order_detail["shortReference"]},\n'
+                                                   f' value with delivery ==>> {order_detail["totalPrice"]},\n'
+                                                   f' reference id ==>> {reference_id}')
 
-                            confirm = input('CONFIRM AND ACCEPT ORDER? Y/N: ')
+                            if int(self.manager.level) > 1:
+                                confirm = input('CONFIRM AND ACCEPT ORDER? Y/N: ')
 
-                            if confirm.upper() == 'Y':
-                                manager.debug_log('CONFIRMED ORDER!!!')
-                                self.send_integration(reference_id)
-                                order_confirmed = self.send_confirmation(reference_id)
-                                if order_confirmed.status_code == 202:
-                                    self.save_cache_orders(reference_id)
-                                new_orders_list.append(order_detail)
+                                if confirm.upper() == 'Y':
+                                    self.manager.debug_log('CONFIRMED ORDER!!!')
+                                    self.send_integration(reference_id)
+                                    order_confirmed = self.send_confirmation(reference_id)
+                                    if order_confirmed.status_code == 202:
+                                        self.save_cache_orders(reference_id)
+                                    new_orders_list.append(order_detail)
+
+                    elif event['code'] == 'CONFIRMED':
+                        if self.load_cache_orders(reference_id):
+                            self.confirmed_list.append(reference_id)
+                            self.save_cache_orders(reference_id)
+                            order_detail = client.get_order_details(reference=reference_id)
+                            new_orders_list.append(order_detail)
 
                 elif event['code'] == 'CONFIRMED':
-                    reference_id = event['correlationId']
                     if self.load_cache_orders(reference_id):
                         self.save_cache_orders(reference_id)
-                        order_placed = client.get_order_details(reference=reference_id)
-                        new_orders_list.append(order_placed)
+                        order_detail = client.get_order_details(reference=reference_id)
+                        new_orders_list.append(order_detail)
         return new_orders_list
 
 
@@ -380,9 +421,9 @@ if __name__ == '__main__':
 
     (options, args) = parser.parse_args()
 
-    branch = options.branch
+    client = IFood()
 
-    manager = Manager()
+    client.manager.branch = options.branch
 
     try:
         del vars(options)['branch']
@@ -394,39 +435,37 @@ if __name__ == '__main__':
         verbose_status = options['verbose']
 
         if options['verbose']:
-            DEBUG = True
-        else:
-            DEBUG = False
+            client.manager.debug = True
+            if len(args) > 0:
+                client.manager.level = args[0]
 
-        if os.path.exists(f'{branch}/ifood_client.json'):
-            with open(f'{branch}/ifood_client.json') as f:
+        if os.path.exists(f'{client.manager.branch}/ifood_client.json'):
+            with open(f'{client.manager.branch}/ifood_client.json') as f:
                 try:
                     options = json.load(f)
                     options['verbose'] = verbose_status
                 except ValueError:
-                    os.remove(f'{branch}/ifood_client.json')
+                    os.remove(f'{client.manager.branch}/ifood_client.json')
 
         if options['verbose'] and options['id'] == '' or options['secret'] == '':
-            manager.debug_log(
+            client.manager.debug_log(
                 'Extra arguments needed for authentication are missing.\n'
                 'For this first run, check the options with -h or --help.')
             sys.exit(0)
     else:
-        if not os.path.exists(f'{branch}/ifood_client.json'):
-            with open(f'{branch}/ifood_client.json', 'w') as f:
-                options = manager.save_credentials()
+        if not os.path.exists(f'{client.manager.branch}/ifood_client.json'):
+            with open(f'{client.manager.branch}/ifood_client.json', 'w') as f:
+                options = client.manager.save_credentials()
         else:
-            with open(f'{branch}/ifood_client.json') as f:
+            with open(f'{client.manager.branch}/ifood_client.json') as f:
                 try:
                     options = json.load(f)
                 except ValueError:
-                    os.remove(f'{branch}/ifood_client.json')
-                    options = manager.save_credentials()
-
-        DEBUG = False
+                    os.remove(f'{client.manager.branch}/ifood_client.json')
+                    options = client.manager.save_credentials()
 
     if type(options) == 'optparse.Values' and not vars(options)['verbose'] and vars(options)['id'] == '':
-        options = manager.save_credentials()
+        options = client.manager.save_credentials()
 
     cli_id = options['id']
     cli_secret = options['secret']
@@ -434,11 +473,14 @@ if __name__ == '__main__':
     pwd = options['password']
     merchant = options['merchant']
 
-    client = IFood(client_id=cli_id, client_secret=cli_secret, username=user, password=pwd, merchant_id=merchant)
+    if merchant != '':
+        client.merchant_id = merchant
+
+    client.auth(client_id=cli_id, client_secret=cli_secret, username=user, password=pwd)
 
     token = client.get_token()
 
     merchant_uuid = client.get_merchants()
 
-    thread_1 = Thread(target=manager.listen_events, args=[])
+    thread_1 = Thread(target=client.manager.listen_events, args=[])
     thread_1.start()
