@@ -1,6 +1,6 @@
 
 ```
-from py_food import IFood
+from Ifood.py_food import IFood
 
 client = IFood() 
 client.manager.branch = '01' #  Configure branch existent
