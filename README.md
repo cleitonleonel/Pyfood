@@ -4,12 +4,12 @@ from py_food import IFood
 
 client = IFood() 
 client.manager.branch = '01' #  Configure branch existent
-client.mechant_id = '1234567' #  Optional to get categories or others configurations
+client.merchant_id = '1234567' #  Optional to get categories or others configurations
 client.auth('client_id', 'secret', 'username', 'password')
 
 client.get_token() #  Return current token
 merchant_uuid = client.get_merchants() #  Return uuid by merchant
-events = client.get_polling() #  Return all events and orders by ifood
+events = client.get_polling() #  Return all events and orders by ifood, use with while 
 
 for reference_id in ["4011395709683044", "1016397702932011"]:
     order_detail = [client.get_order_details(reference=reference_id)]
