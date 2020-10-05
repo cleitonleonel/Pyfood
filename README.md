@@ -19,7 +19,13 @@ for reference_id in ["4011395709683044", "1016397702932011"]:
     client.manager.write_json_file(order_detail, f'del_{file_name}')
 ```
 
-**Generate Executable with Pyinstaller**
+**Instalation with pip:**
+
+``
+pip3 install git+https://github.com/cleitonleonel/Pyfood.git
+``
+
+**Generate Executable with Pyinstaller:**
 
 ``
 pyinstaller --onefile --windowed py_food.py
