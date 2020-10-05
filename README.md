@@ -41,7 +41,9 @@ _Get orders and order information from ifood confirmed by the restaurant._
 _INFO: Confirmed orders can take 30 to 40 seconds to obtain._
 
 Options:
-  ~~~~-version             show program's version number and exit
+
+````
+  --version             show program's version number and exit
   -h, --help            show this help message and exit
   -i ID, --id=ID        Cliente identification obtained from ifood
                         (client_id).
