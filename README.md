@@ -9,7 +9,7 @@ client.auth('client_id', 'secret', 'username', 'password')
 
 client.get_token() #  Return current token
 merchant_uuid = client.get_merchants() #  Return uuid by merchant
-events = client.get_polling() #  Return all events and orders by ifood, use with while 
+events = client.polling_events() #  Return all events and orders by ifood, use with while 
 
 for reference_id in ["4011395709683044", "1016397702932011"]:
     order_detail = [client.get_order_details(reference=reference_id)]
