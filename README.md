@@ -1,5 +1,5 @@
 
-```
+```python3
 from Ifood.py_food import IFood
 
 client = IFood() 
@@ -18,23 +18,25 @@ for reference_id in ["4011395709683044", "1016397702932011"]:
 
     client.manager.write_json_file(order_detail, f'del_{file_name}')
 ```
+**Clone project:**
 
-**Instalation with pip:**
-
-``
-pip3 install git+https://github.com/cleitonleonel/Pyfood.git
-``
+```shell
+git clone https://github.com/cleitonleonel/Pyfood.git
+cd Pyfood
+pip3 install -r requirements.txt
+```
 
 **Generate Executable with Pyinstaller:**
 
-``
+```
 pyinstaller --onefile --windowed py_food.py
-``
+```
 
-**Simple Ifood Listener**
+**Simple Ifood Listener:**
 
-`Usage: py_food.py [options]
-`
+```
+Usage: py_food.py [options]
+```
 
 _Get orders and order information from ifood confirmed by the restaurant._
 
@@ -42,7 +44,7 @@ _INFO: Confirmed orders can take 30 to 40 seconds to obtain._
 
 Options:
 
-````
+```shell
   --version             show program's version number and exit
   -h, --help            show this help message and exit
   -i ID, --id=ID        Cliente identification obtained from ifood
@@ -62,3 +64,4 @@ Options:
   -b BRANCH, --branch=BRANCH
                         Branch identification number.
   -v, --verbose         Outputs log in console.
+```
