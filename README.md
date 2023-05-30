@@ -13,7 +13,7 @@ events = client.polling_events() #  Return all events and orders by ifood, use w
 
 for reference_id in ["4011395709683044", "1016397702932011"]:
     order_detail = [client.get_order_details(reference=reference_id)]
-    file_name = order_detail[0]['shortReference']
+    file_name = order_detail[0]["displayId"]
     print('ORDER #', file_name)
 
     client.write_json_file(order_detail, f'del_{file_name}')
