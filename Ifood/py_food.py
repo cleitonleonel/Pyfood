@@ -1,17 +1,13 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-#
 import os
 import sys
 import json
-import time
 import shutil
+import asyncio
 import requests
 from datetime import datetime
-from threading import Thread
 from optparse import OptionParser
 
-BASE_URL = 'https://pos-api.ifood.com.br'
+BASE_URL = 'https://merchant-api.ifood.com.br'
 
 
 def resource_path(relative_path):
@@ -20,25 +16,23 @@ def resource_path(relative_path):
     except NameError:
         this_file = sys.argv[0]
     this_file = os.path.abspath(this_file)
-
     if getattr(sys, 'frozen', False):
         base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     else:
         base_path = os.path.dirname(this_file)
-
     return os.path.join(base_path, relative_path)
 
 
-class Manager:
+class Manager(object):
 
     def __init__(self):
         self.debug = False
         self.level = 0
-        self.branch = '01'
+        self.base_dir = None
+        self.branch = None
 
     def write_json_file(self, data, file_name, out_folder_path=None):
         folder = resource_path('tmp')
-
         if type(data) is list:
             new_dict = {file_name: data}
             data = new_dict
@@ -46,12 +40,12 @@ class Manager:
             folder = out_folder_path
         if not os.path.exists(folder):
             os.mkdir(folder)
-        dirt = os.path.join(folder + '/', file_name + '.json')
+        dirt = os.path.join(f"{folder}/", f"{file_name}.json")
         try:
             _data = json.dumps(data)
             with open(dirt, 'w') as file:
                 file_json = file.write(str(_data))
-            shutil.copy(dirt, f'{self.branch}/tmp')
+            shutil.copy(dirt, f'{self.base_dir}/tmp')
             return file_json
         except ValueError:
             print('Error!!!')
@@ -60,7 +54,7 @@ class Manager:
         if self.debug:
             print(msg, end=end)
 
-    def listen_events(self):
+    async def listen_events(self):
         turns = 0
         while True:
             if turns < 1:
@@ -69,15 +63,16 @@ class Manager:
                 client.get_token()
             events = client.polling_events()
             new_orders = client.get_placed_orders(events)
+            # print(new_orders)
             if len(new_orders) > 0:
-                file_name = new_orders[0]['shortReference']
+                file_name = new_orders[0]['displayId']
 
                 # orders = self.extract_data(new_orders)
                 # self.write_json_file(orders[0], f'del_{file_name}')
 
                 self.write_json_file(new_orders, f'del_{file_name}')
-            self.debug_log(f'\rI RODE {turns} TIMES...', end='')
-            time.sleep(30)
+            self.debug_log(f'\rRolling {turns}...', end='')
+            await asyncio.sleep(30)
             turns += 1
 
     def extract_data(self, orders):
@@ -88,7 +83,7 @@ class Manager:
                 'loja': f'{self.branch}',
                 'palcnum': 'IFOOD',
                 'pclddtped': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-                'pclnnum': orders[index]['shortReference'],
+                'pclnnum': orders[index]['displayId'],
                 'cpf_cnpj': orders[index]['customer']['taxPayerIdentificationNumber']
             }
 
@@ -110,13 +105,18 @@ class Manager:
 
             order_data['pclctp'] = order_type
 
-            online = ['IFOOD_ONLINE', 'ALA', 'ALR', 'AM', 'APL_MC', 'APL_VIS', 'CARNET', 'CHF', 'DNR', 'ELO', 'ELOD', 'GPY_ELO',
-                      'GPY_MC', 'GPY_MXMC', 'GPY_MXVIS', 'GPY_VIS', 'HIPER', 'IFE', 'LPCLUB', 'MC', 'MCMA', 'MOVPAY_AM', 'MOVPAY_DNR',
-                      'MOVPAY_ELO', 'MOVPAY_HIPER', 'MOVPAY_MC', 'MOVPAY_VIS', 'MPAY', 'MXAM', 'MXMC', 'MXVIS', 'PAY', 'PSE', 'SAP',
+            online = ['IFOOD_ONLINE', 'ALA', 'ALR', 'AM', 'APL_MC', 'APL_VIS', 'CARNET', 'CHF', 'DNR', 'ELO', 'ELOD',
+                      'GPY_ELO',
+                      'GPY_MC', 'GPY_MXMC', 'GPY_MXVIS', 'GPY_VIS', 'HIPER', 'IFE', 'LPCLUB', 'MC', 'MCMA', 'MOVPAY_AM',
+                      'MOVPAY_DNR',
+                      'MOVPAY_ELO', 'MOVPAY_HIPER', 'MOVPAY_MC', 'MOVPAY_VIS', 'MPAY', 'MXAM', 'MXMC', 'MXVIS', 'PAY',
+                      'PSE', 'SAP',
                       'SRP', 'TAO', 'TOD', 'TRO', 'VA_ON', 'VIS', 'VISE', 'VRO']
 
-            credit = ['BANRC', 'BANRD', 'BENVVR', 'BON', 'CHE', 'CPRCAR', 'CRE', 'DNREST', 'GER_CC', 'GER_CT', 'GER_DC', 'GOODC',
-                      'GRNCAR', 'GRNCPL', 'MEREST', 'NUGO', 'NUTCRD', 'QRC', 'RAM', 'RDREST', 'REC', 'RED', 'RHIP', 'RSELE', 'RSODEX',
+            credit = ['BANRC', 'BANRD', 'BENVVR', 'BON', 'CHE', 'CPRCAR', 'CRE', 'DNREST', 'GER_CC', 'GER_CT', 'GER_DC',
+                      'GOODC',
+                      'GRNCAR', 'GRNCPL', 'MEREST', 'NUGO', 'NUTCRD', 'QRC', 'RAM', 'RDREST', 'REC', 'RED', 'RHIP',
+                      'RSELE', 'RSODEX',
                       'TRE', 'TVER', 'VA_OFF', 'VALECA', 'VERDEC', 'VIREST', 'VISAVR', 'VR_SMA', 'VSREST', 'VVREST']
 
             if orders[index]['payments'][0]['code'] == 'DIN':
@@ -128,8 +128,10 @@ class Manager:
 
             order_data['cadctpcred'] = payment_type
             order_data['pclcnomcon'] = str(orders[index]['customer']['name']).replace('PEDIDO DE TESTE - ', '')
-            order_data['pclchrped'] = datetime.strptime(orders[index]['createdAt'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%d/%m/%y")
-            order_data['pclcobs'] = f"PRECO TOTAL: {float(orders[index]['totalPrice'])}, TAXA DE ENTREGA: {float(orders[index]['deliveryFee'])}"
+            order_data['pclchrped'] = datetime.strptime(orders[index]['createdAt'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime(
+                "%d/%m/%y")
+            order_data[
+                'pclcobs'] = f"PRECO TOTAL: {float(orders[index]['totalPrice'])}, TAXA DE ENTREGA: {float(orders[index]['deliveryFee'])}"
             order_data['pclnvalor'] = float(orders[index]['subTotal'])
             order_data['pclnqtdit'] = str(len(orders[index]['items']))
 
@@ -141,13 +143,9 @@ class Manager:
                     'pclnpreco': orders[index]['items'][cont]['price'],
                     'pclcpenden': str(orders[index]['items'][cont]['name'])
                 }
-
                 item_list.append(item_dict)
-
             order_data['items'] = item_list
-
             order_list.append(order_data)
-
         return order_list
 
     def save_credentials(self):
@@ -160,239 +158,231 @@ class Manager:
                 'merchant': input('Entry your id_merchant: ')
             }
             file.write(json.dumps(credentials))
-
         return credentials
 
 
-class IFood:
+class IFood(Manager):
+
+    current_token = None
+    refresh_token = None
+    token_expires = None
+    merchant_uuid = None
+    categories_id = None
+    catalogs_id = None
+    merchant_id = None
+    confirmed_list = []
 
     def __init__(self):
+        super().__init__()
         self.client_id = None
         self.client_secret = None
         self.username = None
         self.password = None
-        self.current_token = None
-        self.token_expires = None
-        self.merchant_uuid = None
-        self.categories_id = None
-        self.merchant_id = None
-        self.confirmed_list = []
-        self.manager = Manager()
+        self.headers = self.get_headers()
         self.session = requests.Session()
 
-    def headers(self):
-        headers = {
+    def get_headers(self):
+        self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) GestordePedidos/6.0.1 "
                           "Chrome/76.0.3809.146 Electron/6.0.12 Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Cache-Control": "no-cache"
         }
-        return headers
+        return self.headers
 
     def send_request(self, method, url, **kwargs):
-        try:
-            response = self.session.request(method, url, **kwargs)
-        except:
-            return None
-        if response.status_code == 200:
-            try:
-                return response.json()
-            except ValueError:
-                return []
-        else:
-            return response
+        return self.session.request(method, url, headers=self.headers, **kwargs)
 
-    def auth(self, client_id, client_secret, username, password):
+    def get_user_code(self):
+        payload = {
+            "clientId": self.client_id
+        }
+        self.headers["content-type"] = "application/x-www-form-urlencoded"
+        response = self.send_request("POST",
+                                     f'{BASE_URL}/authentication/v1.0/oauth/userCode',
+                                     data=payload).json()
+        return response
+
+    def set_credentials(self, client_id, client_secret):
         self.client_id = client_id
         self.client_secret = client_secret
-        self.username = username
-        self.password = password
 
+    def make_payload(self, refresh_token=None):
+        user_data = {}
+        if not refresh_token:
+            user_data = self.get_user_code()
+            print(f'Abra o link no seu navegador e habilite o app {user_data["verificationUrlComplete"]}')
         payload = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "grant_type": "password",
-            "username": self.username,
-            "password": self.password
+            "grantType": "authorization_code" if not refresh_token else "refresh_token",
+            "clientId": self.client_id,
+            "clientSecret": self.client_secret,
+            "authorizationCode": input("Insira aqui o código gerado no portal: ") if not refresh_token else "",
+            "authorizationCodeVerifier": user_data["authorizationCodeVerifier"] if not refresh_token else "",
+            "refreshToken": "" if not refresh_token else refresh_token,
         }
+        return payload
 
-        with self.session as s:
-            response = s.post(f'{BASE_URL}/oauth/token', data=payload, headers=self.headers())
-
+    def authenticate(self, refresh_token=None):
+        payload = self.make_payload(refresh_token)
+        self.headers["content-type"] = "application/x-www-form-urlencoded"
+        response = self.send_request("POST",
+                                     f'{BASE_URL}/authentication/v1.0/oauth/token',
+                                     data=payload)
         if response.status_code == 200:
             response = response.json()
-            self.current_token = response['access_token']
-            self.token_expires = response['expires_in']
+            self.current_token = response['accessToken']
+            self.token_expires = response['expiresIn']
+            self.refresh_token = response['refreshToken']
+            self.headers["authorization"] = f"Bearer {self.current_token}"
             return self.current_token
         else:
-            return self.manager.debug_log('Fail in authentication!!!')
+            return self.debug_log('Fail in authentication!!!')
 
-    def reconnect(self):
-        return self.auth(self.client_id, self.client_secret, self.username, self.password)
+    def refresh(self, refresh_token):
+        return self.authenticate(refresh_token)
 
     def get_current_token(self):
         return self.current_token
 
     def save_token(self):
-        self.reconnect()
-        with open(f'{self.manager.branch}/token', 'w') as file:
-            file.write(self.current_token)
+        self.debug_log('Generating and save token...')
+        with open(f'{client.branch}/ifood_client.json') as file:
+            data = json.load(file)
+            data["token"] = self.current_token
+            data["refresh_token"] = self.refresh_token
+            with open(f'{self.branch}/ifood_client.json', 'w') as file_json:
+                file_json.write(json.dumps(data))
         return self.current_token
 
     def check_token(self, key):
-        headers = {
-            "Authorization": "Bearer " + key
-        }
-        response = self.send_request('GET', f'{BASE_URL}/v1.0/merchants', headers=headers)
+        self.headers["authorization"] = f"Bearer {key}"
+        response = self.send_request("GET",
+                                     f'{BASE_URL}/merchant/v1.0/merchants')
         if not response:
             return False
         return True
 
     def get_new_token(self):
+        with open(f'{client.branch}/ifood_client.json') as file:
+            data = json.load(file)
+            refresh_token = data.get("refresh_token")
+            if refresh_token:
+                self.refresh(refresh_token)
+            else:
+                self.authenticate()
         return self.save_token()
 
     def get_token(self):
-        if os.path.exists(f'{self.manager.branch}/token'):
-            with open(f'{self.manager.branch}/token') as file:
-                key = file.read()
-            if self.check_token(key):
-                self.current_token = key
-                self.manager.debug_log('The token is valid.')
-                return self.current_token
-            else:
-                self.manager.debug_log('Generating new token...')
-                return self.get_new_token()
+        with open(f'{self.branch}/ifood_client.json') as file:
+            data = json.load(file)
+            token = data.get("token")
+        if token and self.check_token(token):
+            self.current_token = token
+            self.debug_log('The token is valid.')
+            return self.current_token
         else:
-            self.reconnect()
-            if not self.current_token:
-                sys.exit(0)
-            with open(f'{self.manager.branch}/token', 'w') as file:
-                file.write(self.current_token)
-
-            self.manager.debug_log('Generating and save token...')
-
-        return self.current_token
+            self.debug_log('Generating new token...')
+            return self.get_new_token()
 
     def polling_events(self):
-        headers = {
-            "Authorization": "Bearer " + self.current_token
-        }
-        response = self.send_request('GET', f'{BASE_URL}/v3.0/events:polling', headers=headers)
-        if not response:
+        response = self.send_request("GET",
+                                     f'{BASE_URL}/order/v1.0/events:polling')
+        if not response.status_code == 200:
             response = []
-        return response
+        return response.json()
 
     def get_merchants(self):
-        headers = {
-            "Authorization": "Bearer " + self.current_token
-        }
-        response = self.send_request('GET', f'{BASE_URL}/v1.0/merchants', headers=headers)
+        response = self.send_request("GET",
+                                     f'{BASE_URL}/merchant/v1.0/merchants').json()
         if response:
             self.merchant_uuid = response[0]['id']
         return self.merchant_uuid
 
     def get_unavailabilities(self):
-        headers = {
-            "Authorization": "Bearer " + self.current_token
-        }
-        return self.send_request('GET', f'{BASE_URL}/v1.0/merchants/{self.merchant_uuid}/unavailabilities',
-                                 headers=headers)
+        return self.send_request("GET",
+                                 f'{BASE_URL}/v1.0/merchants/{self.merchant_uuid}/unavailabilities').json()
 
-    def get_categories(self, merchant_id=None):
+    def get_catalogs(self, merchant_id=None):
         if not merchant_id:
             merchant_id = self.merchant_id
-        headers = {
-            "content-type": "application/json",
-            "authorization": "Bearer " + self.current_token
-        }
-        response = self.send_request('GET', f'{BASE_URL}/v1.0/merchants/{merchant_id}/menus/categories',
-                                     headers=headers)
+        response = self.send_request("GET",
+                                     f'{BASE_URL}/v1.0/merchants/{merchant_id}/catalogs').json()
+        if response:
+            self.catalogs_id = response[0]['id']
+        return response
+
+    def get_categories(self, merchant_id=None, catalog_id=None):
+        if not merchant_id:
+            merchant_id = self.merchant_id
+        response = self.send_request("GET",
+                                     f'{BASE_URL}/v1.0/merchants/{merchant_id}/catalogs/{catalog_id}/categories').json()
         if response:
             self.categories_id = response[0]['id']
         return response
 
     def send_recognition(self, reference):
-        headers = {
-            "Authorization": "Bearer " + self.current_token,
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache"
-        }
-        return self.send_request('POST', f'{BASE_URL}/v1.0/events/acknowledgment', data=reference, headers=headers)
-
-    def send_integration(self, reference):
-        headers = {
-            "Authorization": "Bearer " + self.current_token,
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache"
-        }
-        return self.send_request('POST', f'{BASE_URL}/v1.0/orders/{reference}/statuses/integration', headers=headers)
+        payload = [
+            {"id": "cd40582b-0ef2-4d52-bc7c-507fdff12e21"},
+            {"id": "193dccf8-bf1d-4860-85a0-8019f5809877"}
+        ]
+        self.headers["content-type"] = "application/json"
+        return self.send_request("POST",
+                                 f'{BASE_URL}/v1.0/events/acknowledgment',
+                                 data=payload).json()
 
     def send_confirmation(self, reference):
-        headers = {
-            "Authorization": "Bearer " + self.current_token,
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache"
-        }
-        return self.send_request('POST', f'{BASE_URL}/v1.0/orders/{reference}/statuses/confirmation', headers=headers)
+        self.headers["content-type"] = "application/json"
+        return self.send_request("POST",
+                                 f'{BASE_URL}/order/v1.0/orders/{reference}/confirm')
 
     def save_cache_orders(self, reference):
-        with open(f'{self.manager.branch}/orders', 'a') as file:
-            file.write(reference + ',')
+        with open(f'{self.branch}/orders', 'a') as file:
+            file.write(f"{reference},")
 
     def load_cache_orders(self, reference):
         orders_list = []
-        if os.path.exists(f'{self.manager.branch}/orders'):
-            with open(f'{self.manager.branch}/orders', 'r') as file:
+        if os.path.exists(f'{self.branch}/orders'):
+            with open(f'{self.branch}/orders', 'r') as file:
                 orders_list = file.read().split(',')
             if len(orders_list) > 100:
-                with open(f'{self.manager.branch}/orders', 'w') as file:
+                with open(f'{self.branch}/orders', 'w') as file:
                     file.write('')
         else:
-            with open(f'{self.manager.branch}/orders', 'w') as file:
+            with open(f'{self.branch}/orders', 'w') as file:
                 file.write('')
         if reference not in orders_list:
             return True
 
     def get_order_details(self, reference):
-        headers = {
-            "Authorization": "Bearer " + self.current_token
-        }
-        return self.send_request('GET', f'{BASE_URL}/v3.0/orders/{reference}', headers=headers)
+        return self.send_request("GET",
+                                 f'{BASE_URL}/order/v1.0/orders/{reference}').json()
 
     def get_placed_orders(self, events=None):
         new_orders_list = []
         if events and len(events) > 0:
             for event in events:
-                reference_id = event['correlationId']
-                if self.manager.debug and int(self.manager.level) > 0:
-                    if event['code'] == 'PLACED' and reference_id not in self.confirmed_list:
+                reference_id = event['orderId']
+                if self.debug and int(self.level) > 0:
+                    if event['fullCode'] == 'PLACED' and reference_id not in self.confirmed_list:
                         if self.load_cache_orders(reference_id):
-                            os.system(f'mpg123 {resource_path("tmp")}/arrived-order.mp3 > /dev/null 2>&1')
-
+                            os.system(f'mpg123 {resource_path("src")}/arrived-order.mp3 > /dev/null 2>&1')
                             order_detail = client.get_order_details(reference=reference_id)
-                            self.manager.debug_log(f'\nNEW ORDER ==>> #{order_detail["shortReference"]},\n'
-                                                   f' value with delivery ==>> {order_detail["totalPrice"]},\n'
-                                                   f' reference id ==>> {reference_id}')
-
-                            if int(self.manager.level) > 1:
+                            self.debug_log(f'\n\nNEW ORDER ==>> #{order_detail["displayId"]},\n'
+                                           f' value with delivery ==>> {order_detail["total"]["orderAmount"]},\n'
+                                           f' reference id ==>> {reference_id}')
+                            if int(self.level) > 1:
                                 confirm = input('CONFIRM AND ACCEPT ORDER? Y/N: ')
-
                                 if confirm.upper() == 'Y':
-                                    self.manager.debug_log('CONFIRMED ORDER!!!')
-                                    self.send_integration(reference_id)
+                                    self.debug_log('CONFIRMED ORDER!!!\n')
                                     order_confirmed = self.send_confirmation(reference_id)
                                     if order_confirmed.status_code == 202:
                                         self.save_cache_orders(reference_id)
                                     new_orders_list.append(order_detail)
-
-                    elif event['code'] == 'CONFIRMED':
+                    elif event['fullCode'] == 'CONFIRMED':
                         if self.load_cache_orders(reference_id):
                             self.confirmed_list.append(reference_id)
                             self.save_cache_orders(reference_id)
                             order_detail = client.get_order_details(reference=reference_id)
                             new_orders_list.append(order_detail)
-
-                elif event['code'] == 'CONFIRMED':
+                elif event['fullCode'] == 'CONFIRMED':
                     if self.load_cache_orders(reference_id):
                         self.save_cache_orders(reference_id)
                         order_detail = client.get_order_details(reference=reference_id)
@@ -418,6 +408,8 @@ if __name__ == '__main__':
     parser.add_option("-m", "--merchant", dest="merchant",
                       help="Code generated by ifood, received in your e-mail (merchand_id)"
                            " for integration in yours tests.", default='', type=str)
+    parser.add_option("-d", "--directory", dest="directory",
+                      help="Base directory for files management", default='./', type=str)
     parser.add_option("-b", "--branch", dest="branch",
                       help="Branch identification number.", default='01', type=str)
     parser.add_option("-v", "--verbose", dest="verbose", action='store_true',
@@ -427,7 +419,9 @@ if __name__ == '__main__':
 
     client = IFood()
 
-    client.manager.branch = options.branch
+    delivery_dir = os.path.join(options.branch, "delivery")
+    client.base_dir = os.path.join(options.directory, options.branch)
+    client.branch = os.path.join(options.directory, delivery_dir)
 
     try:
         del vars(options)['branch']
@@ -439,37 +433,39 @@ if __name__ == '__main__':
         verbose_status = options['verbose']
 
         if options['verbose']:
-            client.manager.debug = True
+            client.debug = True
             if len(args) > 0:
-                client.manager.level = args[0]
+                client.level = args[0]
 
-        if os.path.exists(f'{client.manager.branch}/ifood_client.json'):
-            with open(f'{client.manager.branch}/ifood_client.json') as f:
+        if os.path.exists(f'{client.branch}/ifood_client.json'):
+            with open(f'{client.branch}/ifood_client.json') as f:
                 try:
                     options = json.load(f)
                     options['verbose'] = verbose_status
                 except ValueError:
-                    os.remove(f'{client.manager.branch}/ifood_client.json')
+                    os.remove(f'{client.branch}/ifood_client.json')
 
         if options['verbose'] and options['id'] == '' or options['secret'] == '':
-            client.manager.debug_log(
+            client.debug_log(
                 'Extra arguments needed for authentication are missing.\n'
                 'For this first run, check the options with -h or --help.')
             sys.exit(0)
     else:
-        if not os.path.exists(f'{client.manager.branch}/ifood_client.json'):
-            with open(f'{client.manager.branch}/ifood_client.json', 'w') as f:
-                options = client.manager.save_credentials()
+        if not os.path.exists(f'{client.branch}/ifood_client.json'):
+            with open(f'{client.branch}/ifood_client.json', 'w') as f:
+                options = client.save_credentials()
         else:
-            with open(f'{client.manager.branch}/ifood_client.json') as f:
+            with open(f'{client.branch}/ifood_client.json') as f:
                 try:
                     options = json.load(f)
                 except ValueError:
-                    os.remove(f'{client.manager.branch}/ifood_client.json')
-                    options = client.manager.save_credentials()
+                    os.remove(f'{client.branch}/ifood_client.json')
+                    options = client.save_credentials()
 
-    if type(options) == 'optparse.Values' and not vars(options)['verbose'] and vars(options)['id'] == '':
-        options = client.manager.save_credentials()
+    if type(options) == 'optparse.Values' \
+            and not vars(options)['verbose'] \
+            and vars(options)['id'] == '':
+        options = client.save_credentials()
 
     cli_id = options['id']
     cli_secret = options['secret']
@@ -477,14 +473,18 @@ if __name__ == '__main__':
     pwd = options['password']
     merchant = options['merchant']
 
+    client.set_credentials(cli_id, cli_secret)
+
     if merchant != '':
         client.merchant_id = merchant
 
-    client.auth(client_id=cli_id, client_secret=cli_secret, username=user, password=pwd)
-
-    token = client.get_token()
+    if not client.get_token():
+        client.authenticate()
 
     merchant_uuid = client.get_merchants()
 
-    thread_1 = Thread(target=client.manager.listen_events, args=[])
-    thread_1.start()
+    try:
+        asyncio.run(client.listen_events())
+    except KeyboardInterrupt as e:
+        print("\nFechando...")
+        quit(0)
